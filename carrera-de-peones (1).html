@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f1ea">
+<title>Carrera de Peones</title>
+<style>
+  :root {
+    --board-light: #f0d9b5;
+    --board-dark: #b58863;
+    --board-border: #5c3a21;
+    --board-bg: #2b1d12;
+    --accent: #d97757;
+    --accent-dark: #c1663f;
+    --panel-bg: #ffffff;
+    --page-bg: #f4f1ea;
+    --line: #e4ddcf;
+    --text: #2a221a;
+    --text-soft: #6b6052;
+    --highlight-move: rgba(89, 173, 92, 0.55);
+    --highlight-select: rgba(217, 119, 87, 0.65);
+    --highlight-last: rgba(120, 160, 220, 0.45);
+    /* Todo el juego se dimensiona a partir del tablero */
+    --board-size: min(94vw, 520px, calc(100vh - 230px));
+  }
+  @supports (height: 100svh) {
+    :root { --board-size: min(94vw, 520px, calc(100svh - 230px)); }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    background: var(--page-bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: max(16px, env(safe-area-inset-top)) 8px max(32px, env(safe-area-inset-bottom));
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1 {
+    font-family: 'Georgia', 'Iowan Old Style', serif;
+    font-size: clamp(1.4rem, 5vw, 2rem);
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+
+  .game {
+    width: calc(var(--board-size) + 12px); /* tablero + borde */
+    min-width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .panel {
+    background: var(--panel-bg);
+    border-radius: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .panel h2 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-soft);
+    margin: 0 0 8px;
+    font-weight: 600;
+  }
+
+  /* ---- Barra de partida ---- */
+  .toolbar { display: flex; flex-direction: column; gap: 10px; }
+  .tool-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
+
+  .seg {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fbfaf7;
+    flex: 1 1 auto;
+  }
+  .seg button {
+    flex: 1;
+    min-height: 40px;
+    min-width: 40px;
+    border: none;
+    background: transparent;
+    font-size: 1.15rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    color: var(--text);
+    touch-action: manipulation;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .seg button .lbl { font-size: 0.72rem; font-weight: 600; }
+  .seg.hidden { display: none; }
+
+  .act {
+    flex: 1;
+    min-height: 44px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #fbfaf7;
+    color: var(--text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    touch-action: manipulation;
+  }
+  .act .ico { font-size: 1.15rem; line-height: 1; }
+  .act.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .act.square { flex: 0 0 44px; }
+  .act:disabled { opacity: 0.4; cursor: not-allowed; }
+  @media (hover: hover) {
+    .act:not(:disabled):hover { filter: brightness(0.96); }
+    .act.primary:hover { background: var(--accent-dark); }
+  }
+
+  /* ---- Tablero ---- */
+  .board-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+  .status {
+    font-size: 1rem;
+    font-weight: 600;
+    min-height: 1.4em;
+    text-align: center;
+  }
+  .status.win { color: #3a8c3f; }
+  .status.draw { color: var(--text-soft); }
+
+  .board {
+    width: calc(var(--board-size) + 12px);
+    height: calc(var(--board-size) + 12px);
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    border: 6px solid var(--board-border);
+    border-radius: 4px;
+    background: var(--board-bg);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+    touch-action: manipulation;
+  }
+
+  .sq {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    font-size: calc(var(--board-size) / 8 * 0.6);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .sq.light { background: var(--board-light); }
+  .sq.dark { background: var(--board-dark); }
+  .sq.selectable { cursor: pointer; }
+  @media (hover: hover) {
+    .sq.selectable:hover::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.15);
+    }
+  }
+  .sq.selected::before {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border: 3px solid var(--highlight-select);
+    border-radius: 3px;
+    pointer-events: none;
+  }
+  .sq.move-target::after {
+    content: "";
+    position: absolute;
+    width: 30%;
+    height: 30%;
+    border-radius: 50%;
+    background: var(--highlight-move);
+    pointer-events: none;
+  }
+  .sq.move-target.has-capture::after {
+    width: 80%;
+    height: 80%;
+    background: transparent;
+    border: 5px solid var(--highlight-move);
+  }
+  .sq.last-move { box-shadow: inset 0 0 0 4px var(--highlight-last); }
+
+  .piece { line-height: 1; pointer-events: none; position: relative; z-index: 2; }
+  .piece.emoji { font-size: 0.95em; }
+  .piece.minimal {
+    width: 62%;
+    height: 62%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.55em;
+    font-weight: 700;
+  }
+  .piece.minimal.white-pawn { background: #f7f3ea; color: #2b1d12; box-shadow: 0 0 0 2px #2b1d12 inset; }
+  .piece.minimal.black-pawn { background: #2b1d12; color: #f7f3ea; box-shadow: 0 0 0 2px #f7f3ea inset; }
+
+  .piece.vector { display: inline-flex; align-items: center; justify-content: center; width: 80%; height: 80%; }
+  .piece.vector svg, .piece.vector img { width: 100%; height: 100%; display: block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .piece { transition: none !important; }
+  }
+
+  /* ---- Temas ---- */
+  .theme-marmol .board { --board-light: #eceef1; --board-dark: #9aa3ad; --board-border: #5c6570; --board-bg: #d8dbe0; }
+
+  .theme-neon .board { --board-light: #26406f; --board-dark: #0c1526; --board-border: #2fe3ff; --board-bg: #050914; box-shadow: 0 0 20px rgba(47,227,255,0.35), 0 4px 18px rgba(0,0,0,0.25); }
+  .theme-neon .piece.minimal.white-pawn, .theme-neon .piece.emoji.white-pawn { filter: drop-shadow(0 0 4px #58f0ff); }
+  .theme-neon .piece.minimal.black-pawn, .theme-neon .piece.emoji.black-pawn { filter: drop-shadow(0 0 4px #ff2fb0); }
+  .theme-neon .piece.vector.white-pawn { filter: drop-shadow(0 0 4px #58f0ff); }
+  .theme-neon .piece.vector.black-pawn { filter: drop-shadow(0 0 4px #ff2fb0); }
+  .theme-neon .piece.vector.white-pawn svg path { fill: #58f0ff !important; stroke: #58f0ff !important; }
+  .theme-neon .piece.vector.black-pawn svg path { fill: #ff2fb0 !important; stroke: #ff2fb0 !important; }
+
+  .theme-neon2 .board { --board-light: #4a3670; --board-dark: #140d20; --board-border: #7cff2f; --board-bg: #0c0714; box-shadow: 0 0 20px rgba(124,255,47,0.3), 0 4px 18px rgba(0,0,0,0.25); }
+  .theme-neon2 .piece.minimal.white-pawn, .theme-neon2 .piece.emoji.white-pawn { filter: drop-shadow(0 0 4px #7cff2f); }
+  .theme-neon2 .piece.minimal.black-pawn, .theme-neon2 .piece.emoji.black-pawn { filter: drop-shadow(0 0 4px #b026ff); }
+  .theme-neon2 .piece.vector.white-pawn { filter: drop-shadow(0 0 4px #7cff2f); }
+  .theme-neon2 .piece.vector.black-pawn { filter: drop-shadow(0 0 4px #b026ff); }
+  .theme-neon2 .piece.vector.white-pawn svg path { fill: #7cff2f !important; stroke: #7cff2f !important; }
+  .theme-neon2 .piece.vector.black-pawn svg path { fill: #b026ff !important; stroke: #b026ff !important; }
+
+  .legend {
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    text-align: center;
+    margin: 0;
+  }
+
+  /* ---- Paneles inferiores ---- */
+  .below-board { display: flex; gap: 12px; flex-wrap: wrap; }
+  .below-board .panel { flex: 1 1 200px; }
+
+  select {
+    width: 100%;
+    min-height: 40px;
+    padding: 7px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: #fbfaf7;
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+  label.field { display: block; font-size: 0.78rem; color: var(--text-soft); margin-bottom: 4px; }
+  .field-group { margin-bottom: 10px; }
+  .field-group:last-child { margin-bottom: 0; }
+
+  .captures-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; font-size: 0.85rem; }
+  .move-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 150px;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    border-top: 1px solid var(--line);
+  }
+  .move-list li { display: flex; gap: 8px; padding: 4px 2px; border-bottom: 1px solid var(--line); }
+  .move-list:empty::after { content: "Aún no hay jugadas."; display: block; color: var(--text-soft); padding: 8px 2px 0; }
+  .move-num { color: var(--text-soft); width: 26px; flex-shrink: 0; }
+  .move-w, .move-b { flex: 1; font-variant-numeric: tabular-nums; }
+
+  /* ---- Ventana de reglas ---- */
+  dialog {
+    border: none;
+    border-radius: 12px;
+    padding: 20px;
+    max-width: min(420px, 90vw);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    color: var(--text);
+  }
+  dialog::backdrop { background: rgba(0,0,0,0.45); }
+  dialog h3 { margin: 0 0 10px; font-family: 'Georgia', serif; }
+  dialog ul { margin: 0 0 16px; padding-left: 20px; line-height: 1.5; font-size: 0.92rem; }
+  dialog .act { width: 100%; }
+
+  @media (max-width: 480px) {
+    .seg button .lbl { display: none; }
+    .act .txt { display: none; }
+    .panel { padding: 10px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Carrera de Peones</h1>
+
+<div class="game">
+  <div class="panel toolbar" id="toolbar">
+    <div class="tool-row">
+      <div class="seg" id="mode-seg" role="group" aria-label="Modo de juego">
+        <button data-value="cpu" aria-pressed="true" title="Contra el ordenador">🖥️<span class="lbl">CPU</span></button>
+        <button data-value="human" aria-pressed="false" title="Dos jugadores en este dispositivo">👥<span class="lbl">2 jug.</span></button>
+      </div>
+      <div class="seg" id="side-seg" role="group" aria-label="Tu bando">
+        <button data-value="white" aria-pressed="true" title="Jugar con blancas">⚪<span class="lbl">Blancas</span></button>
+        <button data-value="black" aria-pressed="false" title="Jugar con negras">⚫<span class="lbl">Negras</span></button>
+      </div>
+      <div class="seg" id="difficulty-seg" role="group" aria-label="Dificultad">
+        <button data-value="easy" aria-pressed="false" title="Fácil">🌱</button>
+        <button data-value="medium" aria-pressed="true" title="Media">⚔️</button>
+        <button data-value="hard" aria-pressed="false" title="Difícil">🔥</button>
+      </div>
+    </div>
+    <div class="tool-row">
+      <button class="act primary" id="new-game-btn" title="Nueva partida"><span class="ico">⟳</span><span class="txt">Nueva</span></button>
+      <button class="act" id="undo-btn" title="Deshacer jugada" disabled><span class="ico">↶</span><span class="txt">Deshacer</span></button>
+      <button class="act square" id="sound-toggle-btn" title="Silenciar sonido" aria-label="Silenciar o activar sonido"><span class="ico">🔊</span></button>
+      <button class="act square" id="info-btn" title="Reglas" aria-label="Ver reglas"><span class="ico">ℹ️</span></button>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="status" id="status" aria-live="polite">Blancas mueven</div>
+    <div class="board" id="board"></div>
+    <p class="legend">Toca un peón para ver sus movimientos y toca el destino para moverlo.</p>
+  </div>
+
+  <div class="below-board">
+    <div class="panel">
+      <h2>Apariencia</h2>
+      <div class="field-group">
+        <label class="field" for="board-theme-select">Tablero</label>
+        <select id="board-theme-select">
+          <option value="clasico">Clásico</option>
+          <option value="marmol">Mármol</option>
+          <option value="neon">Neón</option>
+          <option value="neon2">Neón 2</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field" for="piece-set-select">Peones</label>
+        <select id="piece-set-select">
+          <option value="clasico">Clásico (Lichess cburnett)</option>
+          <option value="fantasy">Fantasy (Lichess)</option>
+          <option value="minimal">Minimalista</option>
+          <option value="emoji">Emoji</option>
+        </select>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Historial y capturas</h2>
+      <div class="captures-row">
+        <span>⚪ Peones negros capturados: <strong id="white-captures">0</strong></span>
+        <span>⚫ Peones blancos capturados: <strong id="black-captures">0</strong></span>
+      </div>
+      <ol class="move-list" id="move-list"></ol>
+    </div>
+  </div>
+</div>
+
+<dialog id="info-dialog">
+  <h3>Reglas</h3>
+  <ul>
+    <li>Ocho peones por bando.</li>
+    <li>Gana quien primero lleve un peón a la última fila.</li>
+    <li>Los peones mueven y capturan como en el ajedrez. Sin capturas al paso.</li>
+    <li>Si el bando que debe mover no tiene jugadas, es empate.</li>
+  </ul>
+  <button class="act primary" id="info-close-btn">Entendido</button>
+</dialog>
+
+<script>
+(function() {
+  const N = 8; // 8x8, rows 0..7 (row0 = rank1, row7 = rank8)
+  const WHITE = 'white', BLACK = 'black';
+
+  let board, turn, selected, lastMove, gameOver, mode, humanSide, difficulty, boardTheme, pieceSet;
+  let captures = { white: 0, black: 0 };
+  let moveHistory = [];
+  let stateStack = [];
+  let aiThinking = false;
+  let soundOn = true;
+  let audioCtx = null;
+
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const bodyEl = document.body;
+
+  const modeSeg = document.getElementById('mode-seg');
+  const sideSeg = document.getElementById('side-seg');
+  const difficultySeg = document.getElementById('difficulty-seg');
+  const infoBtn = document.getElementById('info-btn');
+  const infoDialog = document.getElementById('info-dialog');
+  const infoCloseBtn = document.getElementById('info-close-btn');
+  const ui = { mode: 'cpu', side: 'white', difficulty: 'medium' };
+  const boardThemeSelect = document.getElementById('board-theme-select');
+  const pieceSetSelect = document.getElementById('piece-set-select');
+  const newGameBtn = document.getElementById('new-game-btn');
+  const undoBtn = document.getElementById('undo-btn');
+  const soundToggleBtn = document.getElementById('sound-toggle-btn');
+  const moveListEl = document.getElementById('move-list');
+  const whiteCapturesEl = document.getElementById('white-captures');
+  const blackCapturesEl = document.getElementById('black-captures');
+
+  function initialBoard() {
+    const b = Array.from({length: N}, () => Array(N).fill(null));
+    for (let c = 0; c < N; c++) {
+      b[1][c] = WHITE; // rank 2
+      b[6][c] = BLACK; // rank 7
+    }
+    return b;
+  }
+
+  function cloneBoard(b) { return b.map(row => row.slice()); }
+
+  function inBounds(r, c) { return r >= 0 && r < N && c >= 0 && c < N; }
+
+  function pawnMoves(b, r, c, color) {
+    const moves = [];
+    const dir = color === WHITE ? 1 : -1;
+    const startRow = color === WHITE ? 1 : 6;
+    // forward one
+    if (inBounds(r + dir, c) && b[r + dir][c] === null) {
+      moves.push({r: r + dir, c, capture: false});
+      // forward two
+      if (r === startRow && b[r + 2 * dir][c] === null) {
+        moves.push({r: r + 2 * dir, c, capture: false});
+      }
+    }
+    // captures
+    for (const dc of [-1, 1]) {
+      const nr = r + dir, nc = c + dc;
+      if (inBounds(nr, nc) && b[nr][nc] !== null && b[nr][nc] !== color) {
+        moves.push({r: nr, c: nc, capture: true});
+      }
+    }
+    return moves;
+  }
+
+  function allLegalMoves(b, color) {
+    const result = [];
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        if (b[r][c] === color) {
+          const mvs = pawnMoves(b, r, c, color);
+          for (const m of mvs) result.push({from: {r, c}, to: {r: m.r, c: m.c}, capture: m.capture});
+        }
+      }
+    }
+    return result;
+  }
+
+  function applyMove(b, move) {
+    const nb = cloneBoard(b);
+    const color = nb[move.from.r][move.from.c];
+    nb[move.from.r][move.from.c] = null;
+    nb[move.to.r][move.to.c] = color;
+    return nb;
+  }
+
+  function reachedLastRank(move, color) {
+    if (color === WHITE) return move.to.r === N - 1;
+    return move.to.r === 0;
+  }
+
+  function otherColor(color) { return color === WHITE ? BLACK : WHITE; }
+
+  // ---- Notation ----
+  function squareName(r, c) {
+    return String.fromCharCode(97 + c) + (r + 1);
+  }
+
+  function moveNotation(move, isCapture) {
+    return squareName(move.from.r, move.from.c) + (isCapture ? 'x' : '-') + squareName(move.to.r, move.to.c);
+  }
+
+  // ---- Sound (Web Audio API, sin archivos externos) ----
+  function getAudioCtx() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      audioCtx = new AC();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function tone(freq, duration, type, vol, delay) {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type || 'sine';
+      osc.frequency.value = freq;
+      const t0 = ctx.currentTime + (delay || 0);
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(vol || 0.15, t0 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + duration + 0.03);
+    } catch (e) { /* audio no disponible, seguimos sin sonido */ }
+  }
+
+  function playSound(kind) {
+    if (!soundOn) return;
+    if (kind === 'move') tone(300, 0.09, 'triangle', 0.12);
+    else if (kind === 'capture') { tone(180, 0.12, 'square', 0.14); tone(120, 0.14, 'square', 0.1, 0.03); }
+    else if (kind === 'win') [440, 554, 659, 880].forEach((f, i) => tone(f, 0.2, 'sine', 0.13, i * 0.11));
+    else if (kind === 'draw') { tone(220, 0.28, 'sine', 0.1); tone(196, 0.28, 'sine', 0.1, 0.14); }
+    else if (kind === 'select') tone(520, 0.05, 'sine', 0.06);
+  }
+
+  // ---- Evaluation & AI ----
+  function raceScore(b, color) {
+    // Prima el avance general y, sobre todo, el peón más adelantado:
+    // en una carrera lo que importa es quién llega antes, no la suma total.
+    let total = 0;
+    let bestAdv = color === WHITE ? -1 : N;
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        if (b[r][c] === color) {
+          const adv = color === WHITE ? r : (N - 1 - r);
+          total += adv * adv;
+          if (color === WHITE ? r > bestAdv : r < bestAdv) bestAdv = r;
+        }
+      }
+    }
+    const leaderAdv = color === WHITE ? bestAdv : (N - 1 - bestAdv);
+    if (leaderAdv >= 0) total += leaderAdv * 9;
+    return total;
+  }
+
+  function evaluate(b, aiColor) {
+    const opp = otherColor(aiColor);
+    let aiCount = 0, oppCount = 0;
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        if (b[r][c] === aiColor) aiCount++;
+        else if (b[r][c] === opp) oppCount++;
+      }
+    }
+    const aiMoves = allLegalMoves(b, aiColor).length;
+    const oppMoves = allLegalMoves(b, opp).length;
+    return (raceScore(b, aiColor) - raceScore(b, opp)) + (aiCount - oppCount) * 6 + (aiMoves - oppMoves) * 0.4;
+  }
+
+  function orderMoves(moves, color) {
+    // Explorar antes las capturas y los avances más profundos mejora mucho la poda alfa-beta.
+    return moves.slice().sort((a, b) => {
+      const scoreOf = (m) => (m.capture ? 50 : 0) + (color === WHITE ? m.to.r : (N - 1 - m.to.r));
+      return scoreOf(b) - scoreOf(a);
+    });
+  }
+
+  function minimax(b, color, depth, alpha, beta, aiColor) {
+    const moves = orderMoves(allLegalMoves(b, color), color);
+    if (moves.length === 0) {
+      // side to move is blocked -> draw
+      return { score: 0, move: null };
+    }
+    if (depth === 0) {
+      return { score: evaluate(b, aiColor), move: null };
+    }
+    const maximizing = color === aiColor;
+    let bestMove = moves[0];
+    let bestScore = maximizing ? -Infinity : Infinity;
+    for (const m of moves) {
+      if (reachedLastRank(m, color)) {
+        const score = (color === aiColor ? 100000 : -100000) - depth; // prefer faster wins/slower losses
+        if (maximizing ? score > bestScore : score < bestScore) { bestScore = score; bestMove = m; }
+        if (maximizing) alpha = Math.max(alpha, bestScore); else beta = Math.min(beta, bestScore);
+        if (alpha >= beta) break;
+        continue;
+      }
+      const nb = applyMove(b, m);
+      const result = minimax(nb, otherColor(color), depth - 1, alpha, beta, aiColor);
+      const score = result.score;
+      if (maximizing) {
+        if (score > bestScore) { bestScore = score; bestMove = m; }
+        alpha = Math.max(alpha, bestScore);
+      } else {
+        if (score < bestScore) { bestScore = score; bestMove = m; }
+        beta = Math.min(beta, bestScore);
+      }
+      if (alpha >= beta) break;
+    }
+    return { score: bestScore, move: bestMove };
+  }
+
+  function now() { return (typeof performance !== 'undefined') ? performance.now() : Date.now(); }
+
+  function iterativeSearch(b, color, maxDepth, timeLimitMs) {
+    // Profundiza por rondas dentro de un presupuesto de tiempo: juega más fuerte
+    // en finales sencillos (pocos peones) sin volverse lento en posiciones complejas.
+    const start = now();
+    let bestMove = null;
+    for (let depth = 1; depth <= maxDepth; depth++) {
+      if (now() - start > timeLimitMs) break;
+      const result = minimax(b, color, depth, -Infinity, Infinity, color);
+      if (result.move) bestMove = result.move;
+      if (result.score >= 90000 || result.score <= -90000) break; // victoria/derrota forzada encontrada
+    }
+    return bestMove;
+  }
+
+  function chooseAiMove(b, color) {
+    const moves = allLegalMoves(b, color);
+    if (moves.length === 0) return null;
+
+    // immediate win check for any difficulty
+    for (const m of moves) {
+      if (reachedLastRank(m, color)) return m;
+    }
+
+    if (difficulty === 'easy') {
+      // mostly random, slight bias to forward non-losing moves
+      if (Math.random() < 0.25) {
+        return moves[Math.floor(Math.random() * moves.length)];
+      }
+      const depthResult = minimax(b, color, 1, -Infinity, Infinity, color);
+      return depthResult.move || moves[Math.floor(Math.random() * moves.length)];
+    }
+    if (difficulty === 'medium') {
+      return iterativeSearch(b, color, 6, 250) || moves[0];
+    }
+    // hard
+    return iterativeSearch(b, color, 14, 700) || moves[0];
+  }
+
+  // ---- Rendering ----
+  const PIECE_CHARS = {
+    clasico: { white: '♙', black: '♟' },
+    emoji: { white: '⬜', black: '⬛' },
+    minimal: { white: '', black: '' }
+  };
+
+  // Peón "Clásico": set cburnett de Colin M. L. Burnett (GPLv2+),
+  // set por defecto de lichess.org, tomado de su repo open source lichess-org/lila.
+  const PAWN_SVG = {
+    white: '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 45 45"><path fill="#fff" stroke="#000" stroke-linecap="round" stroke-width="1.5" d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z"/></svg>',
+    black: '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 45 45"><path fill="#1c1c1c" stroke="#000" stroke-linecap="round" stroke-width="1.5" d="M22.5 9a4 4 0 0 0-3.22 6.38 6.48 6.48 0 0 0-.87 10.65c-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47a6.46 6.46 0 0 0-.87-10.65A4.01 4.01 0 0 0 22.5 9z"/></svg>'
+  };
+
+  // Peón "Fantasy": set de Maurizio Monge (licencia MIT), incluido en lichess-org/lila.
+  // Se usa como <img> para que los ids internos de sus degradados no choquen entre piezas.
+  const FANTASY_PAWN = {
+    white: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiBpZD0icGF3biIgdmlld0JveD0iMCAwIDkzMy4zMyA5MzMuMzMiPjxzdHlsZSBpZD0ic3R5bGUtYmFzZSI+LmJhc2V7ZmlsbC1vcGFjaXR5OjE7ZmlsbC1ydWxlOmV2ZW5vZGQ7c3Ryb2tlLW1pdGVybGltaXQ6NDtzdHJva2UtZGFzaGFycmF5Om5vbmU7c3Ryb2tlLWxpbmVjYXA6cm91bmQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kO3N0cm9rZS1vcGFjaXR5OjF9LnN0cm9rZS1tZWRpdW17c3Ryb2tlLXdpZHRoOjIwfS5zdHJva2UtY29sb3J7c3Ryb2tlOiMwMDB9PC9zdHlsZT48ZGVmcyBpZD0iZGVmczM2MjIyIj48bGluZWFyR3JhZGllbnQgaWQ9ImZpbGxHcmFkaWVudCI+PHN0b3AgaWQ9InN0b3AwIiBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmZmYiIHN0b3Atb3BhY2l0eT0iMSIvPjxzdG9wIGlkPSJzdG9wMSIgb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjYmZkM2Q3IiBzdG9wLW9wYWNpdHk9IjEiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCB4bGluazpocmVmPSIjZmlsbEdyYWRpZW50IiBpZD0iaGVhZC1ncmFkaWVudCIgeDE9IjU4Ni41MyIgeDI9IjExMjYuMDIiIHkxPSIzMjguMDQiIHkyPSI1MzQuMiIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCguNzM0NDcgMCAwIC43MzYgLTg0LjY2IDU4LjQ0KSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiLz48bGluZWFyR3JhZGllbnQgeGxpbms6aHJlZj0iI2ZpbGxHcmFkaWVudCIgaWQ9InNob3VsZGVycy1ncmFkaWVudCIgeDE9IjI3NS4yNCIgeDI9Ijg2Mi42NSIgeTE9IjQ1OC42NiIgeTI9IjU2MC43NSIgZ3JhZGllbnRUcmFuc2Zvcm09InRyYW5zbGF0ZSgzNiAyOCkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIi8+PGxpbmVhckdyYWRpZW50IHhsaW5rOmhyZWY9IiNmaWxsR3JhZGllbnQiIGlkPSJwYXduLWJvZHktZ3JhZGllbnQiIHgxPSIzMDAuMjciIHgyPSI3NzQuMDUiIHkxPSI2MjMuNzgiIHkyPSI3NjQuOSIgZ3JhZGllbnRUcmFuc2Zvcm09InRyYW5zbGF0ZSgzNiAyOCkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIi8+PC9kZWZzPjxwYXRoIGlkPSJib3VuZGFyeSIgZmlsbD0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIzNSIgZD0iTTQ3My41NCAyMjIuOGExMjIuNDEgMTEwLjQgMCAwIDAtMTIyLjQxIDExMC40IDEyMi40MSAxMTAuNCAwIDAgMCAxMjIuNCAxMTAuNCAxMjIuNDEgMTEwLjQgMCAwIDAgMTIyLjQyLTExMC40IDEyMi40MSAxMTAuNCAwIDAgMC0xMjIuNDEtMTEwLjRtLTMuNzIgMjIzLjc3Yy0zMC4zMy4zMS01OC43IDUuMjMtOTMuNDcgMTQuMTYtNzQuMiAxOS4wNy0xMDAuMSA2Ni4wMi0xMDAuMSA2Ni4wMmgxNTYuMzNjLTkgMTQ0Ljk1LTg4LjU4IDE5MS4yNi0xMjcuMTMgMjE4LjUtMzQuMiAyNC4xOC0yNS40NiA4Mi4zNSAxOS45IDg1LjMyIDI4LjEyIDEuODQgMjc2LjYyIDIuMzYgMzA1LjY2LS44NSA1MS4zOC01LjY3IDUyLjg0LTY2LjcgMTkuNjktODcuMy00OS4zNS0zMC42OC0xMjUuOTQtNjUtMTM3LjE2LTIxNS42N0g2ODUuMXMtNDMuNDMtNTEuODMtMTEwLjAzLTY2LjY4Yy00Mi42Mi05LjUtNzQuOS0xMy44LTEwNS4yNC0xMy41eiIgY2xhc3M9ImJhc2Ugc3Ryb2tlLWNvbG9yIi8+PGVsbGlwc2UgaWQ9ImhlYWQiIGN4PSI0NzMuNTQiIGN5PSIzMzMuMjEiIGZpbGw9InVybCgjaGVhZC1ncmFkaWVudCkiIGNsYXNzPSJiYXNlIHN0cm9rZS1jb2xvciBzdHJva2UtbWVkaXVtIiByeD0iMTIyLjQxIiByeT0iMTEwLjQiLz48cGF0aCBpZD0icGF3bi1ib2R5IiBmaWxsPSJ1cmwoI3Bhd24tYm9keS1ncmFkaWVudCkiIGQ9Ik00MzMuNDIgNDk1LjAxYzEuNDcgMTcwLjE4LTg2Ljc0IDIyMS4xLTEyNy45NyAyNTAuMjUtMzQuMiAyNC4xNy0yNS40NiA4Mi4zNCAxOS45IDg1LjMgMjguMTIgMS44NSAyNzYuNjIgMi4zNyAzMDUuNjYtLjg0IDUxLjM4LTUuNjcgNTIuODQtNjYuNyAxOS42OS04Ny4zLTUyLjYxLTMyLjcxLTEzNi4yLTY5LjU0LTEzOC41LTI0Ny4xLS40NC0zMy4zLTc5LjA0LTMwLTc4Ljc4LS4zeiIgY2xhc3M9ImJhc2Ugc3Ryb2tlLWNvbG9yIHN0cm9rZS1tZWRpdW0iLz48cGF0aCBpZD0ic2hvdWxkZXJzIiBmaWxsPSJ1cmwoI3Nob3VsZGVycy1ncmFkaWVudCkiIGQ9Ik0zNzYuMzUgNDYwLjc0Yy03NC4yIDE5LjA2LTEwMC4xIDY2LjAxLTEwMC4xIDY2LjAxaDQwOC44NHMtNDMuNDMtNTEuODMtMTEwLjAzLTY2LjY4Yy04NS4yMy0xOS0xMjkuMTctMTcuMi0xOTguNy42N3oiIGNsYXNzPSJiYXNlIHN0cm9rZS1jb2xvciBzdHJva2UtbWVkaXVtIi8+PHBhdGggaWQ9Imxvd2VyLWxpbmUiIGZpbGw9Im5vbmUiIGQ9Ik0zNzkuMTIgNzM5LjY3aDE4Ny45IiBjbGFzcz0iYmFzZSBzdHJva2UtY29sb3Igc3Ryb2tlLW1lZGl1bSIvPjwvc3ZnPg==',
+    black: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiBpZD0icGF3biIgdmlld0JveD0iMCAwIDkzMy4zMyA5MzMuMzMiPjxzdHlsZSBpZD0ic3R5bGUtYmFzZSI+LmJhc2V7ZmlsbC1vcGFjaXR5OjE7ZmlsbC1ydWxlOmV2ZW5vZGQ7c3Ryb2tlLW1pdGVybGltaXQ6NDtzdHJva2UtZGFzaGFycmF5Om5vbmU7c3Ryb2tlLWxpbmVjYXA6cm91bmQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kO3N0cm9rZS1vcGFjaXR5OjF9LnN0cm9rZS1tZWRpdW17c3Ryb2tlLXdpZHRoOjIwfS5zdHJva2UtY29sb3J7c3Ryb2tlOiMwMDB9PC9zdHlsZT48ZGVmcyBpZD0iZGVmczM2MjIyIj48bGluZWFyR3JhZGllbnQgaWQ9ImZpbGxHcmFkaWVudCI+PHN0b3AgaWQ9InN0b3AwIiBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM3Zjg5OWIiIHN0b3Atb3BhY2l0eT0iMSIvPjxzdG9wIGlkPSJzdG9wMSIgb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMWMxYzJmIiBzdG9wLW9wYWNpdHk9IjEiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCB4bGluazpocmVmPSIjZmlsbEdyYWRpZW50IiBpZD0iaGVhZC1ncmFkaWVudCIgeDE9IjU4Ni41MyIgeDI9IjExMjYuMDIiIHkxPSIzMjguMDQiIHkyPSI1MzQuMiIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCguNzM0NDcgMCAwIC43MzYgLTg0LjY2IDU4LjQ0KSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiLz48bGluZWFyR3JhZGllbnQgeGxpbms6aHJlZj0iI2ZpbGxHcmFkaWVudCIgaWQ9InNob3VsZGVycy1ncmFkaWVudCIgeDE9IjI3NS4yNCIgeDI9Ijg2Mi42NSIgeTE9IjQ1OC42NiIgeTI9IjU2MC43NSIgZ3JhZGllbnRUcmFuc2Zvcm09InRyYW5zbGF0ZSgzNiAyOCkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIi8+PGxpbmVhckdyYWRpZW50IHhsaW5rOmhyZWY9IiNmaWxsR3JhZGllbnQiIGlkPSJwYXduLWJvZHktZ3JhZGllbnQiIHgxPSIzMDAuMjciIHgyPSI3NzQuMDUiIHkxPSI2MjMuNzgiIHkyPSI3NjQuOSIgZ3JhZGllbnRUcmFuc2Zvcm09InRyYW5zbGF0ZSgzNiAyOCkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIi8+PC9kZWZzPjxwYXRoIGlkPSJib3VuZGFyeSIgZmlsbD0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIzNSIgZD0iTTQ3My41NCAyMjIuOGExMjIuNDEgMTEwLjQgMCAwIDAtMTIyLjQxIDExMC40IDEyMi40MSAxMTAuNCAwIDAgMCAxMjIuNCAxMTAuNCAxMjIuNDEgMTEwLjQgMCAwIDAgMTIyLjQyLTExMC40IDEyMi40MSAxMTAuNCAwIDAgMC0xMjIuNDEtMTEwLjRtLTMuNzIgMjIzLjc3Yy0zMC4zMy4zMS01OC43IDUuMjMtOTMuNDcgMTQuMTYtNzQuMiAxOS4wNy0xMDAuMSA2Ni4wMi0xMDAuMSA2Ni4wMmgxNTYuMzNjLTkgMTQ0Ljk1LTg4LjU4IDE5MS4yNi0xMjcuMTMgMjE4LjUtMzQuMiAyNC4xOC0yNS40NiA4Mi4zNSAxOS45IDg1LjMyIDI4LjEyIDEuODQgMjc2LjYyIDIuMzYgMzA1LjY2LS44NSA1MS4zOC01LjY3IDUyLjg0LTY2LjcgMTkuNjktODcuMy00OS4zNS0zMC42OC0xMjUuOTQtNjUtMTM3LjE2LTIxNS42N0g2ODUuMXMtNDMuNDMtNTEuODMtMTEwLjAzLTY2LjY4Yy00Mi42Mi05LjUtNzQuOS0xMy44LTEwNS4yNC0xMy41eiIgY2xhc3M9ImJhc2Ugc3Ryb2tlLWNvbG9yIi8+PGVsbGlwc2UgaWQ9ImhlYWQiIGN4PSI0NzMuNTQiIGN5PSIzMzMuMjEiIGZpbGw9InVybCgjaGVhZC1ncmFkaWVudCkiIGNsYXNzPSJiYXNlIHN0cm9rZS1jb2xvciBzdHJva2UtbWVkaXVtIiByeD0iMTIyLjQxIiByeT0iMTEwLjQiLz48cGF0aCBpZD0icGF3bi1ib2R5IiBmaWxsPSJ1cmwoI3Bhd24tYm9keS1ncmFkaWVudCkiIGQ9Ik00MzMuNDIgNDk1LjAxYzEuNDcgMTcwLjE4LTg2Ljc0IDIyMS4xLTEyNy45NyAyNTAuMjUtMzQuMiAyNC4xNy0yNS40NiA4Mi4zNCAxOS45IDg1LjMgMjguMTIgMS44NSAyNzYuNjIgMi4zNyAzMDUuNjYtLjg0IDUxLjM4LTUuNjcgNTIuODQtNjYuNyAxOS42OS04Ny4zLTUyLjYxLTMyLjcxLTEzNi4yLTY5LjU0LTEzOC41LTI0Ny4xLS40NC0zMy4zLTc5LjA0LTMwLTc4Ljc4LS4zeiIgY2xhc3M9ImJhc2Ugc3Ryb2tlLWNvbG9yIHN0cm9rZS1tZWRpdW0iLz48cGF0aCBpZD0ic2hvdWxkZXJzIiBmaWxsPSJ1cmwoI3Nob3VsZGVycy1ncmFkaWVudCkiIGQ9Ik0zNzYuMzUgNDYwLjc0Yy03NC4yIDE5LjA2LTEwMC4xIDY2LjAxLTEwMC4xIDY2LjAxaDQwOC44NHMtNDMuNDMtNTEuODMtMTEwLjAzLTY2LjY4Yy04NS4yMy0xOS0xMjkuMTctMTcuMi0xOTguNy42N3oiIGNsYXNzPSJiYXNlIHN0cm9rZS1jb2xvciBzdHJva2UtbWVkaXVtIi8+PHBhdGggaWQ9Imxvd2VyLWxpbmUiIGZpbGw9Im5vbmUiIGQ9Ik0zNzkuMTIgNzM5LjY3aDE4Ny45IiBjbGFzcz0iYmFzZSBzdHJva2UtY29sb3Igc3Ryb2tlLW1lZGl1bSIvPjwvc3ZnPg=='
+  };
+
+  function pieceEl(color) {
+    const span = document.createElement('span');
+    span.classList.add('piece', color + '-pawn');
+    if (pieceSet === 'minimal') {
+      span.classList.add('minimal');
+      span.textContent = 'P';
+    } else if (pieceSet === 'emoji') {
+      span.classList.add('emoji');
+      span.textContent = color === WHITE ? '🔵' : '🔴';
+    } else if (pieceSet === 'fantasy') {
+      span.classList.add('vector');
+      const img = document.createElement('img');
+      img.src = FANTASY_PAWN[color];
+      img.alt = '';
+      img.draggable = false;
+      span.appendChild(img);
+    } else {
+      span.classList.add('vector');
+      span.innerHTML = PAWN_SVG[color];
+    }
+    return span;
+  }
+
+  function squareEl(r, c) {
+    return boardEl.querySelector('.sq[data-r="' + r + '"][data-c="' + c + '"]');
+  }
+
+  function render() {
+    boardEl.innerHTML = '';
+    const moves = selected ? pawnMoves(board, selected.r, selected.c, board[selected.r][selected.c]) : [];
+    const moveTargets = {};
+    for (const m of moves) moveTargets[m.r + '_' + m.c] = m.capture;
+
+    for (let rr = N - 1; rr >= 0; rr--) {
+      for (let c = 0; c < N; c++) {
+        const r = rr;
+        const sq = document.createElement('div');
+        const isLight = (r + c) % 2 === 1;
+        sq.classList.add('sq', isLight ? 'light' : 'dark');
+        sq.dataset.r = r;
+        sq.dataset.c = c;
+
+        if (lastMove && ((lastMove.from.r === r && lastMove.from.c === c) || (lastMove.to.r === r && lastMove.to.c === c))) {
+          sq.classList.add('last-move');
+        }
+        if (selected && selected.r === r && selected.c === c) {
+          sq.classList.add('selected');
+        }
+        const key = r + '_' + c;
+        if (moveTargets.hasOwnProperty(key)) {
+          sq.classList.add('move-target');
+          if (moveTargets[key]) sq.classList.add('has-capture');
+        }
+
+        const piece = board[r][c];
+        if (piece) {
+          sq.appendChild(pieceEl(piece));
+        }
+
+        const humanTurnNow = (mode === 'human') || (mode === 'cpu' && turn === humanSide);
+        if (!gameOver && humanTurnNow) {
+          if (piece === turn) {
+            sq.classList.add('selectable');
+          } else if (selected && moveTargets.hasOwnProperty(key)) {
+            sq.classList.add('selectable');
+          }
+        }
+
+        sq.addEventListener('click', onSquareClick);
+        boardEl.appendChild(sq);
+      }
+    }
+  }
+
+  function animateMove(move, firstRect) {
+    if (!firstRect) return;
+    const toEl = squareEl(move.to.r, move.to.c);
+    const movedPieceEl = toEl ? toEl.querySelector('.piece') : null;
+    if (!movedPieceEl) return;
+    const lastRect = movedPieceEl.getBoundingClientRect();
+    const dx = firstRect.left - lastRect.left;
+    const dy = firstRect.top - lastRect.top;
+    if (dx === 0 && dy === 0) return;
+    movedPieceEl.style.transition = 'none';
+    movedPieceEl.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
+    requestAnimationFrame(() => {
+      movedPieceEl.style.transition = 'transform 0.16s cubic-bezier(.3,.6,.4,1)';
+      movedPieceEl.style.transform = 'translate(0, 0)';
+    });
+  }
+
+  function renderHistory() {
+    moveListEl.innerHTML = '';
+    for (let i = 0; i < moveHistory.length; i += 2) {
+      const li = document.createElement('li');
+      const num = (i / 2) + 1;
+      const whiteMove = moveHistory[i] ? moveHistory[i].notation : '';
+      const blackMove = moveHistory[i + 1] ? moveHistory[i + 1].notation : '';
+      const numSpan = document.createElement('span');
+      numSpan.className = 'move-num';
+      numSpan.textContent = num + '.';
+      const wSpan = document.createElement('span');
+      wSpan.className = 'move-w';
+      wSpan.textContent = whiteMove;
+      const bSpan = document.createElement('span');
+      bSpan.className = 'move-b';
+      bSpan.textContent = blackMove;
+      li.appendChild(numSpan);
+      li.appendChild(wSpan);
+      li.appendChild(bSpan);
+      moveListEl.appendChild(li);
+    }
+    moveListEl.scrollTop = moveListEl.scrollHeight;
+  }
+
+  function updateCaptureCounters() {
+    whiteCapturesEl.textContent = captures.white;
+    blackCapturesEl.textContent = captures.black;
+  }
+
+  function updateUndoState() {
+    undoBtn.disabled = aiThinking || stateStack.length === 0;
+  }
+
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.classList.remove('win', 'draw');
+    if (kind) statusEl.classList.add(kind);
+  }
+
+  function updateStatus() {
+    if (gameOver) return;
+    const label = turn === WHITE ? 'Blancas' : 'Negras';
+    if (mode === 'cpu' && turn !== humanSide) {
+      setStatus(label + ' piensan (ordenador)...');
+    } else {
+      setStatus(label + ' mueven');
+    }
+  }
+
+  function endGame(winnerColor, reason) {
+    gameOver = true;
+    if (winnerColor === null) {
+      setStatus('Empate: ningún bando puede mover', 'draw');
+    } else {
+      const label = winnerColor === WHITE ? 'Blancas' : 'Negras';
+      setStatus(label + ' ganan la carrera' + (reason ? ' — ' + reason : ''), 'win');
+    }
+  }
+
+  function checkGameEndBeforeMove(color) {
+    const moves = allLegalMoves(board, color);
+    if (moves.length === 0) {
+      endGame(null);
+      return true;
+    }
+    return false;
+  }
+
+  // ---- Historial de estados (para Deshacer) ----
+  function pushSnapshot() {
+    stateStack.push({
+      board: cloneBoard(board),
+      turn,
+      lastMove: lastMove ? { from: { r: lastMove.from.r, c: lastMove.from.c }, to: { r: lastMove.to.r, c: lastMove.to.c } } : null,
+      gameOver,
+      capturesWhite: captures.white,
+      capturesBlack: captures.black,
+      historyLen: moveHistory.length
+    });
+  }
+
+  function restoreSnapshot(s) {
+    board = s.board;
+    turn = s.turn;
+    lastMove = s.lastMove;
+    gameOver = s.gameOver;
+    captures.white = s.capturesWhite;
+    captures.black = s.capturesBlack;
+    moveHistory.length = s.historyLen;
+    selected = null;
+  }
+
+  function undoMove() {
+    if (aiThinking || stateStack.length === 0) return;
+    let s = stateStack.pop();
+    restoreSnapshot(s);
+    // Si jugamos contra la CPU, deshacemos también su respuesta para que vuelva a ser tu turno.
+    if (mode === 'cpu' && turn !== humanSide && stateStack.length > 0) {
+      s = stateStack.pop();
+      restoreSnapshot(s);
+    }
+    render();
+    renderHistory();
+    updateCaptureCounters();
+    updateUndoState();
+    if (!gameOver) updateStatus();
+  }
+
+  function makeMove(move) {
+    if (gameOver) return;
+    pushSnapshot();
+
+    const capturedColor = board[move.to.r][move.to.c];
+    const isCapture = capturedColor !== null;
+    const movedColor = turn;
+
+    const fromEl = squareEl(move.from.r, move.from.c);
+    const movingPieceEl = fromEl ? fromEl.querySelector('.piece') : null;
+    const firstRect = movingPieceEl ? movingPieceEl.getBoundingClientRect() : null;
+
+    board = applyMove(board, move);
+    lastMove = move;
+    if (isCapture) captures[movedColor]++;
+    moveHistory.push({ color: movedColor, notation: moveNotation(move, isCapture) });
+    playSound(isCapture ? 'capture' : 'move');
+
+    renderHistory();
+    updateCaptureCounters();
+    updateUndoState();
+
+    if (reachedLastRank(move, movedColor)) {
+      render();
+      animateMove(move, firstRect);
+      endGame(movedColor, 'llegó a la fila ' + (movedColor === WHITE ? '8' : '1'));
+      playSound('win');
+      return;
+    }
+
+    turn = otherColor(turn);
+    selected = null;
+
+    if (checkGameEndBeforeMove(turn)) {
+      render();
+      animateMove(move, firstRect);
+      playSound('draw');
+      return;
+    }
+
+    render();
+    animateMove(move, firstRect);
+    updateStatus();
+    maybeTriggerAi();
+  }
+
+  function maybeTriggerAi() {
+    if (gameOver) return;
+    if (mode === 'cpu' && turn !== humanSide) {
+      aiThinking = true;
+      updateUndoState();
+      setTimeout(() => {
+        const move = chooseAiMove(board, turn);
+        aiThinking = false;
+        if (move) {
+          makeMove(move);
+        } else {
+          updateUndoState();
+        }
+      }, 300);
+    }
+  }
+
+  function onSquareClick(e) {
+    if (gameOver) return;
+    const r = parseInt(e.currentTarget.dataset.r, 10);
+    const c = parseInt(e.currentTarget.dataset.c, 10);
+
+    const humanTurnNow = (mode === 'human') || (mode === 'cpu' && turn === humanSide);
+    if (!humanTurnNow) return;
+
+    const piece = board[r][c];
+
+    if (selected) {
+      const moves = pawnMoves(board, selected.r, selected.c, board[selected.r][selected.c]);
+      const target = moves.find(m => m.r === r && m.c === c);
+      if (target) {
+        const move = { from: { r: selected.r, c: selected.c }, to: { r, c } };
+        selected = null;
+        makeMove(move);
+        return;
+      }
+    }
+
+    if (piece === turn) {
+      selected = { r, c };
+      playSound('select');
+      render();
+      return;
+    }
+
+    selected = null;
+    render();
+  }
+
+  function applyThemeClasses() {
+    bodyEl.classList.remove('theme-clasico', 'theme-marmol', 'theme-neon', 'theme-neon2');
+    bodyEl.classList.add('theme-' + boardTheme);
+  }
+
+  function newGame() {
+    board = initialBoard();
+    turn = WHITE;
+    selected = null;
+    lastMove = null;
+    gameOver = false;
+    captures = { white: 0, black: 0 };
+    moveHistory = [];
+    stateStack = [];
+    aiThinking = false;
+
+    mode = ui.mode;
+    humanSide = ui.side;
+    difficulty = ui.difficulty;
+    boardTheme = boardThemeSelect.value;
+    pieceSet = pieceSetSelect.value;
+
+    syncSegments();
+
+    applyThemeClasses();
+    render();
+    renderHistory();
+    updateCaptureCounters();
+    updateUndoState();
+    updateStatus();
+    maybeTriggerAi();
+  }
+
+  newGameBtn.addEventListener('click', newGame);
+  undoBtn.addEventListener('click', undoMove);
+  soundToggleBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundToggleBtn.querySelector('.ico').textContent = soundOn ? '🔊' : '🔇';
+    soundToggleBtn.title = soundOn ? 'Silenciar sonido' : 'Activar sonido';
+    if (soundOn) tone(440, 0.05, 'sine', 0.08);
+  });
+  function syncSegments() {
+    for (const [seg, key] of [[modeSeg, 'mode'], [sideSeg, 'side'], [difficultySeg, 'difficulty']]) {
+      seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.value === ui[key])));
+    }
+    sideSeg.classList.toggle('hidden', ui.mode !== 'cpu');
+    difficultySeg.classList.toggle('hidden', ui.mode !== 'cpu');
+  }
+
+  function bindSegment(seg, key, onChange) {
+    seg.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || btn.dataset.value === ui[key]) return;
+      ui[key] = btn.dataset.value;
+      syncSegments();
+      onChange();
+    });
+  }
+  // Cambiar modo o bando empieza una partida nueva; la dificultad se aplica al instante.
+  bindSegment(modeSeg, 'mode', newGame);
+  bindSegment(sideSeg, 'side', newGame);
+  bindSegment(difficultySeg, 'difficulty', () => { difficulty = ui.difficulty; });
+
+  infoBtn.addEventListener('click', () => {
+    if (typeof infoDialog.showModal === 'function') infoDialog.showModal();
+    else alert('Ocho peones por bando. Gana quien primero lleve un peón a la última fila. Sin capturas al paso.');
+  });
+  infoCloseBtn.addEventListener('click', () => infoDialog.close());
+  infoDialog.addEventListener('click', (e) => { if (e.target === infoDialog) infoDialog.close(); });
+  boardThemeSelect.addEventListener('change', () => { boardTheme = boardThemeSelect.value; applyThemeClasses(); render(); });
+  pieceSetSelect.addEventListener('change', () => { pieceSet = pieceSetSelect.value; render(); });
+
+  newGame();
+})();
+</script>
+
+</body>
+</html>
